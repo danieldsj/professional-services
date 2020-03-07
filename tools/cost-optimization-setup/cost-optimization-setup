@@ -11,49 +11,69 @@ read -p "Billing Account ID: " BILLING_ACCOUNT_ID
 read -p "Organization ID: " ORGANIZATION_ID
 read -p "BigQuery Project ID: " BIGQUERY_PROJECT_ID
 read -p "BigQuery Dataset: " BIGQUERY_DATASET
+echo
 
 # For testing purposes.
-#. ./secrets.sh
+if [[ -f secrets.sh ]]; then
+  . ./secrets.sh
+fi
 
 ###### BILLING EXPORT DATA ######
 # Link to enable billing exports to bigquery.
-BILLING_EXPORT_URL="https://console.cloud.google.com/billing/${BILLING_ACCOUNT_ID}/export/bigquery/edit?organizationId=${ORGANIZATION_ID}"
+echo "Please visit the following link to enable Billing Exports.  When prompted specify ${BIGQUERY_DATASET} for the dataset:"
+echo "     https://console.cloud.google.com/billing/${BILLING_ACCOUNT_ID}/export/bigquery/edit?organizationId=${ORGANIZATION_ID}"
+read -p "Press ENTER to continue."
+
 # Possible command to validate whether the information has been exported.
-echo "bq ls ds1 | grep 'gcp_billing_export' | wc -l"
+# We may want to put this in a loop to verify the export before proceeding.
+if [[ $(bq ls ds1 | grep 'gcp_billing_export') ]]; then
+  echo "Billing data exported."
+else
+  echo "Billing data has not yet been exported."
+fi
+echo
 
-
-###### CLOUD ASSET INVENTORY DATA ######
+##### CLOUD ASSET INVENTORY DATA ######
 # The cloud asset inventory data can be exported in one command.
-echo "gcloud asset export --content-type='resource' --organization='${ORGANIZATION_ID}' --bigquery-table='projects/${BIGQUERY_PROJECT_ID}/datasets/${BIGQUERY_DATASET}/tables/cloud_asset_inventory'"
 
+echo "Exporting Cloud Asset Inventory information into BigQuery"
+#  gcloud asset export --content-type='resource' --organization='${ORGANIZATION_ID}' --bigquery-table='projects/${BIGQUERY_PROJECT_ID}/datasets/${BIGQUERY_DATASET}/tables/cloud_asset_inventory'"
+
+# Possible command to validate whether the information has been exported.
+# We may want to put this in a loop to verify the export before proceeding.
+if [[ $(bq ls ds1 | grep 'cloud_asset_inventory') ]]; then
+  echo "Inventory data exported."
+else
+  echo "Inventory data has not yet been exported."
+fi
+echo
 
 ###### RECOMMENDER ######
 # We need to iterate over each project we would like to run the recommender API on.
 # We need to know what zones the instances are running in, in advance of getting recommendations.
 # We need to enable the API on each project before we can get the recommendations.
 # This process may take a VERY long time.
+echo "Exporting recommender information into bigquery"
 
 # For each project.
 for PROJECT in $(gcloud projects list --format='value(projectId)'); do
-  gcloud services list --format='value(name,state)' | grep 'compute.googleapis.com.*ENABLED'
 
   # If the compute api is enabled.
   if [[ $(gcloud services list --format='value(name,state)' | grep 'compute.googleapis.com.*ENABLED') ]]; then
     
     # Enable the recommender API.
-    echo "gcloud services enable recommender.googleapis.com --project='${PROJECT}'"
+    echo "Enabling recommender for project with project ID: ${PROJECT}"
+    # gcloud services enable recommender.googleapis.com --project='${PROJECT}'
     
     # For each zone.
     for ZONE in $(gcloud compute instances list --quiet --project ${PROJECT} --format='value(zone)' | sort | uniq); do
       
       # Get recommendations
-      echo "gcloud recommender recommendations list --recommender='google.compute.instance.MachineTypeRecommender' --location='${ZONE}' --project='${PROJECT}'"
-      echo "gcloud recommender recommendations list --recommender='google.compute.instanceGroupManager.MachineTypeRecommender' --location='${ZONE}' --project='${PROJECT}'"
+      echo "Getting instance machine type recommendations for project ${PROJECT} and zone ${ZONE}."
+      # gcloud recommender recommendations list --recommender='google.compute.instance.MachineTypeRecommender' --location='${ZONE}' --project='${PROJECT}'"
+
+      echo "Getting instance group machine type recommendations for project ${PROJECT} and zone ${ZONE}."
+      # gcloud recommender recommendations list --recommender='google.compute.instanceGroupManager.MachineTypeRecommender' --location='${ZONE}' --project='${PROJECT}'
     done
   fi
 done
-
-
-
-
-
