@@ -3,17 +3,17 @@
 # Script assists with collecting information that can be used to optimize costs.
 
 # Display introduction text.
-INTRODUCTION_TEXT="This script gathers information about your cluster and imports it into BigQuery. The data is then used by a Data Studio report to make cost optmizaton recommendations. This script is intended to be used in Cloud Shell or similar environment." 
-dialog --clear --msgbox "$INTRODUCTION_TEXT" 20 60
+echo "This script gathers information about your cluster and imports it into BigQuery. The data is then used by a Data Studio report to make cost optmizaton recommendations. This script is intended to be used in Cloud Shell or similar environment." 
+echo
 
 # Prompt user for information.
-BILLING_ACCOUNT_ID=$(dialog --output-fd 1 --clear --inputbox "Enter your billing account id:" 0 0)
-ORGANIZATION_ID=$(dialog --output-fd 1 --clear --inputbox "Enter your organization id:" 0 0)
-BIGQUERY_PROJECT_ID=$(dialog --output-fd 1 --clear --inputbox "Enter your project id:" 0 0)
-BIGQUERY_DATASET=$(dialog --output-fd 1 --clear --inputbox "Enter your BigQuery dataset:" 0 0)
+read -p "Billing Account ID: " BILLING_ACCOUNT_ID
+read -p "Organization ID: " ORGANIZATION_ID
+read -p "BigQuery Project ID: " BIGQUERY_PROJECT_ID
+read -p "BigQuery Dataset: " BIGQUERY_DATASET
 
 # For testing purposes.
-#. ./secrets.sh
+. ./secrets.sh
 
 ###### BILLING EXPORT DATA ######
 # Link to enable billing exports to bigquery.
