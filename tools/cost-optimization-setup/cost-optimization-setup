@@ -13,7 +13,7 @@ read -p "BigQuery Project ID: " BIGQUERY_PROJECT_ID
 read -p "BigQuery Dataset: " BIGQUERY_DATASET
 
 # For testing purposes.
-. ./secrets.sh
+#. ./secrets.sh
 
 ###### BILLING EXPORT DATA ######
 # Link to enable billing exports to bigquery.
@@ -24,7 +24,7 @@ echo "bq ls ds1 | grep 'gcp_billing_export' | wc -l"
 
 ###### CLOUD ASSET INVENTORY DATA ######
 # The cloud asset inventory data can be exported in one command.
-echo "gcloud asset export --content-type='resource' --organization='${ORGANIZATION_ID}' --bigquery-table='projects/${PROJECT_ID}/datasets/${BIGQUERY_DATASET}/tables/cloud_asset_inventory'"
+echo "gcloud asset export --content-type='resource' --organization='${ORGANIZATION_ID}' --bigquery-table='projects/${BIGQUERY_PROJECT_ID}/datasets/${BIGQUERY_DATASET}/tables/cloud_asset_inventory'"
 
 
 ###### RECOMMENDER ######
