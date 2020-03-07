@@ -1,0 +1,59 @@
+#!/bin/bash
+#
+# Script assists with collecting information that can be used to optimize costs.
+
+# Display introduction text.
+INTRODUCTION_TEXT="This script gathers information about your cluster and imports it into BigQuery. The data is then used by a Data Studio report to make cost optmizaton recommendations. This script is intended to be used in Cloud Shell or similar environment." 
+dialog --clear --msgbox "$INTRODUCTION_TEXT" 20 60
+
+# Prompt user for information.
+BILLING_ACCOUNT_ID=$(dialog --output-fd 1 --clear --inputbox "Enter your billing account id:" 0 0)
+ORGANIZATION_ID=$(dialog --output-fd 1 --clear --inputbox "Enter your organization id:" 0 0)
+BIGQUERY_PROJECT_ID=$(dialog --output-fd 1 --clear --inputbox "Enter your project id:" 0 0)
+BIGQUERY_DATASET=$(dialog --output-fd 1 --clear --inputbox "Enter your BigQuery dataset:" 0 0)
+
+# For testing purposes.
+#. ./secrets.sh
+
+###### BILLING EXPORT DATA ######
+# Link to enable billing exports to bigquery.
+BILLING_EXPORT_URL="https://console.cloud.google.com/billing/${BILLING_ACCOUNT_ID}/export/bigquery/edit?organizationId=${ORGANIZATION_ID}"
+# Possible command to validate whether the information has been exported.
+echo "bq ls ds1 | grep 'gcp_billing_export' | wc -l"
+
+
+###### CLOUD ASSET INVENTORY DATA ######
+# The cloud asset inventory data can be exported in one command.
+echo "gcloud asset export --content-type='resource' --organization='${ORGANIZATION_ID}' --bigquery-table='projects/${PROJECT_ID}/datasets/${BIGQUERY_DATASET}/tables/cloud_asset_inventory'"
+
+
+###### RECOMMENDER ######
+# We need to iterate over each project we would like to run the recommender API on.
+# We need to know what zones the instances are running in, in advance of getting recommendations.
+# We need to enable the API on each project before we can get the recommendations.
+# This process may take a VERY long time.
+
+# For each project.
+for PROJECT in $(gcloud projects list --format='value(projectId)'); do
+  gcloud services list --format='value(name,state)' | grep 'compute.googleapis.com.*ENABLED'
+
+  # If the compute api is enabled.
+  if [[ $(gcloud services list --format='value(name,state)' | grep 'compute.googleapis.com.*ENABLED') ]]; then
+    
+    # Enable the recommender API.
+    echo "gcloud services enable recommender.googleapis.com --project='${PROJECT}'"
+    
+    # For each zone.
+    for ZONE in $(gcloud compute instances list --quiet --project ${PROJECT} --format='value(zone)' | sort | uniq); do
+      
+      # Get recommendations
+      echo "gcloud recommender recommendations list --recommender='google.compute.instance.MachineTypeRecommender' --location='${ZONE}' --project='${PROJECT}'"
+      echo "gcloud recommender recommendations list --recommender='google.compute.instanceGroupManager.MachineTypeRecommender' --location='${ZONE}' --project='${PROJECT}'"
+    done
+  fi
+done
+
+
+
+
+
