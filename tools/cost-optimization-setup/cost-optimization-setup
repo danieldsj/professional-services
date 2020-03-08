@@ -1,79 +1,165 @@
 #!/bin/bash
 #
+# Copyright 2018 Google Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
 # Script assists with collecting information that can be used to optimize costs.
+
+
+#### PROMPTS
 
 # Display introduction text.
 echo "This script gathers information about your cluster and imports it into BigQuery. The data is then used by a Data Studio report to make cost optmizaton recommendations. This script is intended to be used in Cloud Shell or similar environment." 
 echo
 
-# Prompt user for information.
-read -p "Billing Account ID: " BILLING_ACCOUNT_ID
-read -p "Organization ID: " ORGANIZATION_ID
-read -p "BigQuery Project ID: " BIGQUERY_PROJECT_ID
-read -p "BigQuery Dataset: " BIGQUERY_DATASET
-echo
-
-# For testing purposes.
+# Override the environment variables with the ones in secrets.sh if it exists for testing purposes.
 if [[ -f secrets.sh ]]; then
   . ./secrets.sh
 fi
 
-###### BILLING EXPORT DATA ######
-# Link to enable billing exports to bigquery.
+# Prompt user for information if environment variables not already set.
+if [[ -z "${BILLING_ACCOUNT_ID}" ]]; then
+  read -p "Billing Account ID: " BILLING_ACCOUNT_ID
+fi
+
+if [[ -z "${ORGANIZATION_ID}" ]]; then
+  read -p "Organization ID: " ORGANIZATION_ID
+fi
+
+if [[ -z "${BIGQUERY_PROJECT_ID}" ]]; then
+  read -p "BigQuery Project ID: " BIGQUERY_PROJECT_ID
+fi
+
+if [[ -z "${BIGQUERY_DATASET}" ]]; then
+  read -p "BigQuery Dataset: " BIGQUERY_DATASET
+fi
+
+echo
+
+#### INPUT VALIDATION
+
+# Check to see if the BILLING_ACCOUNT_ID is valid.  If not, list the active billing accounts and exit.
+if ! [[ $(gcloud beta billing accounts list --format 'value(name)' --filter "name:${BILLING_ACCOUNT_ID} AND open:true") ]]; then
+  echo "The billing account id '${BILLING_ACCOUNT_ID}' either does not exist, is not active, or you do not have access to it. Try one of the following:"
+  echo "$(gcloud beta billing accounts list --format 'value(name)' --filter open:true)"
+  echo "(end of list)"
+  exit 1
+fi
+
+# Check to see if the ORGANIZATION_ID is value. If not, list available organizations exit.
+# NOTE: The Cloud Asset Inventory API requires one of organization, project, or folder ids in order to function.
+if ! [[ $(gcloud organizations list --format 'value(name)' --filter name:organizations/${ORGANIZATION_ID}) ]]; then
+  echo "The organization id '${ORGANIZATION_ID}' either does not exist, or you do not have access to it. Try one of the following:"
+  echo "$(gcloud organizations list --format 'value(name)')"
+  echo "(end of list)"
+  exit 1
+fi
+
+# Check to see if the BIGQUERY_PROJECT_ID is valid. If not, list available projects and exit.
+if ! [[ $(gcloud projects list --format 'value(projectId)' --filter "projectId:${BIGQUERY_PROJECT_ID}") ]]; then
+  echo "The BigQuery project id '${BIGQUERY_PROJECT_ID}' either does not exist, or you do not have access to it. Try one of the following:"
+  echo "$(gcloud projects list --format 'value(projectId)')"
+  echo "(end of list)"
+  exit 1
+fi
+
+# Check to see if the BIGQUERY_PROJECT_ID has BigQuery API enabled. If not, exit.
+if ! [[ $(gcloud services list --project ${BIGQUERY_PROJECT_ID} --filter "state:ENABLED AND name:bigquery.googleapis.com" --format 'value(name)') ]]; then
+  echo "The BigQuery project id '${BIGQUERY_PROJECT_ID}' does not have BigQuery APIs enabled."
+  exit 1
+fi
+
+# TODO (danieldsj) - Check to see if the BIGQUERY_DATASET is valid and exists within the above project.  If not, offer to create one.  If not, exit.
+
+
+#### ENABLE BILLING EXPORT
 echo "Please visit the following link to enable Billing Exports.  When prompted specify ${BIGQUERY_DATASET} for the dataset:"
 echo "     https://console.cloud.google.com/billing/${BILLING_ACCOUNT_ID}/export/bigquery/edit?organizationId=${ORGANIZATION_ID}"
+echo
 read -p "Press ENTER to continue."
 
-# Possible command to validate whether the information has been exported.
-# We may want to put this in a loop to verify the export before proceeding.
-if [[ $(bq ls ds1 | grep 'gcp_billing_export') ]]; then
-  echo "Billing data exported."
-else
-  echo "Billing data has not yet been exported."
-fi
-echo
 
-##### CLOUD ASSET INVENTORY DATA ######
-# The cloud asset inventory data can be exported in one command.
-
-echo "Exporting Cloud Asset Inventory information into BigQuery"
-#  gcloud asset export --content-type='resource' --organization='${ORGANIZATION_ID}' --bigquery-table='projects/${BIGQUERY_PROJECT_ID}/datasets/${BIGQUERY_DATASET}/tables/cloud_asset_inventory'"
-
-# Possible command to validate whether the information has been exported.
-# We may want to put this in a loop to verify the export before proceeding.
-if [[ $(bq ls ds1 | grep 'cloud_asset_inventory') ]]; then
-  echo "Inventory data exported."
-else
-  echo "Inventory data has not yet been exported."
-fi
-echo
-
-###### RECOMMENDER ######
-# We need to iterate over each project we would like to run the recommender API on.
+#### ENABLING RECOMMENDER
+# We need to iterate over each project linked to the billing account to ensure the recommender API is turned on.
 # We need to know what zones the instances are running in, in advance of getting recommendations.
-# We need to enable the API on each project before we can get the recommendations.
-# This process may take a VERY long time.
-echo "Exporting recommender information into bigquery"
+echo "Enabling recommender API on projects linked to billing account id '${BILLING_ACCOUNT_ID}'."
 
-# For each project.
-for PROJECT in $(gcloud projects list --format='value(projectId)'); do
+# For each project linked to the supplied billing account.
+for PROJECT in $(gcloud beta billing projects list --billing-account ${BILLING_ACCOUNT_ID} --format 'value(projectId)'); do
 
   # If the compute api is enabled.
-  if [[ $(gcloud services list --format='value(name,state)' | grep 'compute.googleapis.com.*ENABLED') ]]; then
+  if [[ $(gcloud services list --project ${PROJECT} --filter "state:ENABLED AND name:compute.googleapis.com" --format 'value(name)') ]]; then
     
-    # Enable the recommender API.
-    echo "Enabling recommender for project with project ID: ${PROJECT}"
-    # gcloud services enable recommender.googleapis.com --project='${PROJECT}'
-    
-    # For each zone.
-    for ZONE in $(gcloud compute instances list --quiet --project ${PROJECT} --format='value(zone)' | sort | uniq); do
-      
-      # Get recommendations
-      echo "Getting instance machine type recommendations for project ${PROJECT} and zone ${ZONE}."
-      # gcloud recommender recommendations list --recommender='google.compute.instance.MachineTypeRecommender' --location='${ZONE}' --project='${PROJECT}'"
+    # If the recommender api is disabled.
+    if [[ $(gcloud services list --project ${PROJECT} --filter "state:DISABLED AND name:recommender.googleapis.com" --format 'value(name)') ]]; then
 
-      echo "Getting instance group machine type recommendations for project ${PROJECT} and zone ${ZONE}."
-      # gcloud recommender recommendations list --recommender='google.compute.instanceGroupManager.MachineTypeRecommender' --location='${ZONE}' --project='${PROJECT}'
-    done
+      # Enable the API
+      echo "Enabling recommender for project '${PROJECT}'."
+      gcloud services enable recommender.googleapis.com --project='${PROJECT}'
+    fi  
+
   fi
+
+done
+
+
+#### EXPORT CLOUD ASSET INVENTORY DATA
+echo "Exporting Cloud Asset Inventory information into BigQuery"
+gcloud asset export \
+  --output-bigquery-force \
+  --content-type='resource' \
+  --organization=${ORGANIZATION_ID} \
+  --bigquery-table="projects/${BIGQUERY_PROJECT_ID}/datasets/${BIGQUERY_DATASET}/tables/cloud_asset_inventory"
+
+
+#### EXPORT RECOMMENDER DATA
+for PROJECT in $(gcloud beta billing projects list --billing-account ${BILLING_ACCOUNT_ID} --format 'value(projectId)'); do
+
+  # If the compute api is enabled.
+  if [[ $(gcloud services list --project ${PROJECT} --filter "state:ENABLED AND name:compute.googleapis.com" --format 'value(name)') ]]; then
+    
+    # If the recommender api is enabled.
+    if [[ $(gcloud services list --project ${PROJECT} --filter "state:ENABLED AND name:recommender.googleapis.com" --format 'value(name)') ]]; then
+
+      # For each zone.
+      for ZONE in $(gcloud compute instances list --quiet --project ${PROJECT} --format='value(zone)' | sort | uniq); do
+        
+        # Get recommendations
+        echo "Getting instance machine type recommendations for project ${PROJECT} and zone ${ZONE}."
+        echo
+        gcloud alpha recommender recommendations list \
+          --recommender='google.compute.instance.MachineTypeRecommender' \
+          --location="${ZONE}" \
+          --project="${PROJECT}" \
+          --filter primaryImpact.category:COST \
+          --format 'csv(content.operationGroups[0].operations.resource,description, primaryImpact.costProjection.cost.units, primaryImpact.costProjection.cost.currencyCode, primaryImpact.costProjection.duration)'
+        echo
+
+        echo "Getting instance group machine type recommendations for project ${PROJECT} and zone ${ZONE}."
+        echo
+        gcloud alpha recommender recommendations list \
+          --recommender='google.compute.instanceGroupManager.MachineTypeRecommender' \
+          --location="${ZONE}" \
+          --project="${PROJECT}" \
+          --filter primaryImpact.category:COST \
+          --format 'csv(content.operationGroups[0].operations.resource,description, primaryImpact.costProjection.cost.units, primaryImpact.costProjection.cost.currencyCode, primaryImpact.costProjection.duration)'
+        echo
+
+      done
+    
+    fi
+  
+  fi
+
 done
