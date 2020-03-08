@@ -23,6 +23,11 @@
 echo "This script gathers information about your cluster and imports it into BigQuery. The data is then used by a Data Studio report to make cost optmizaton recommendations. This script is intended to be used in Cloud Shell or similar environment." 
 echo
 
+# Override the environment variables with the ones in secrets.sh if it exists for testing purposes.
+if [[ -f secrets.sh ]]; then
+  . ./secrets.sh
+fi
+
 # Prompt user for information if environment variables not already set.
 if [[ -z "${BILLING_ACCOUNT_ID}" ]]; then
   read -p "Billing Account ID: " BILLING_ACCOUNT_ID
@@ -41,11 +46,6 @@ if [[ -z "${BIGQUERY_DATASET}" ]]; then
 fi
 
 echo
-
-# Override the environment variables with the ones in secrets.sh if it exists for testing purposes.
-if [[ -f secrets.sh ]]; then
-  . ./secrets.sh
-fi
 
 #### INPUT VALIDATION
 
@@ -96,7 +96,7 @@ read -p "Press ENTER to continue."
 echo "Enabling recommender API on projects linked to billing account id '${BILLING_ACCOUNT_ID}'."
 
 # For each project linked to the supplied billing account.
-for PROJECT in $(gcloud beta billing projects list --billing-account 01A1B0-8D0C79-77A861 --format 'value(projectId)'); do
+for PROJECT in $(gcloud beta billing projects list --billing-account ${BILLING_ACCOUNT_ID} --format 'value(projectId)'); do
 
   # If the compute api is enabled.
   if [[ $(gcloud services list --project ${PROJECT} --filter "state:ENABLED AND name:compute.googleapis.com" --format 'value(name)') ]]; then
@@ -116,11 +116,15 @@ done
 
 #### EXPORT CLOUD ASSET INVENTORY DATA
 echo "Exporting Cloud Asset Inventory information into BigQuery"
-gcloud asset export --content-type='resource' --organization='${ORGANIZATION_ID}' --bigquery-table='projects/${BIGQUERY_PROJECT_ID}/datasets/${BIGQUERY_DATASET}/tables/cloud_asset_inventory'
+gcloud asset export \
+  --output-bigquery-force \
+  --content-type='resource' \
+  --organization=${ORGANIZATION_ID} \
+  --bigquery-table="projects/${BIGQUERY_PROJECT_ID}/datasets/${BIGQUERY_DATASET}/tables/cloud_asset_inventory"
 
 
 #### EXPORT RECOMMENDER DATA
-for PROJECT in $(gcloud beta billing projects list --billing-account 01A1B0-8D0C79-77A861 --format 'value(projectId)'); do
+for PROJECT in $(gcloud beta billing projects list --billing-account ${BILLING_ACCOUNT_ID} --format 'value(projectId)'); do
 
   # If the compute api is enabled.
   if [[ $(gcloud services list --project ${PROJECT} --filter "state:ENABLED AND name:compute.googleapis.com" --format 'value(name)') ]]; then
@@ -133,10 +137,25 @@ for PROJECT in $(gcloud beta billing projects list --billing-account 01A1B0-8D0C
         
         # Get recommendations
         echo "Getting instance machine type recommendations for project ${PROJECT} and zone ${ZONE}."
-        gcloud recommender recommendations list --recommender='google.compute.instance.MachineTypeRecommender' --location='${ZONE}' --project='${PROJECT}'
+        echo
+        gcloud alpha recommender recommendations list \
+          --recommender='google.compute.instance.MachineTypeRecommender' \
+          --location="${ZONE}" \
+          --project="${PROJECT}" \
+          --filter primaryImpact.category:COST \
+          --format 'csv(content.operationGroups[0].operations.resource,description, primaryImpact.costProjection.cost.units, primaryImpact.costProjection.cost.currencyCode, primaryImpact.costProjection.duration)'
+        echo
 
         echo "Getting instance group machine type recommendations for project ${PROJECT} and zone ${ZONE}."
-        gcloud recommender recommendations list --recommender='google.compute.instanceGroupManager.MachineTypeRecommender' --location='${ZONE}' --project='${PROJECT}'
+        echo
+        gcloud alpha recommender recommendations list \
+          --recommender='google.compute.instanceGroupManager.MachineTypeRecommender' \
+          --location="${ZONE}" \
+          --project="${PROJECT}" \
+          --filter primaryImpact.category:COST \
+          --format 'csv(content.operationGroups[0].operations.resource,description, primaryImpact.costProjection.cost.units, primaryImpact.costProjection.cost.currencyCode, primaryImpact.costProjection.duration)'
+        echo
+
       done
     
     fi
