@@ -20,12 +20,21 @@
 #### PROMPTS
 
 # Display introduction text.
-echo "This script gathers information about your cluster and imports it into BigQuery. The data is then used by a Data Studio report to make cost optmizaton recommendations. This script is intended to be used in Cloud Shell or similar environment." 
-echo
+echo "This script does the following:
+- Collects billing, organization, and project details.
+- Directs you to a URL to enable billing exports.
+- Enables recommender API on all projects linked to the supplied billing account.
+- Exports Cloud Asset Inventory information to BigQuery.
+- Exports Recommender data to BigQuery.
+- Validation throughout.
+"
 
 # Override the environment variables with the ones in secrets.sh if it exists for testing purposes.
-if [[ -f secrets.sh ]]; then
-  . ./secrets.sh
+if [[ -f settings.sh ]]; then
+  echo "A setting.sh file was found.  Loading variables from there."
+  . ./settings.sh
+else
+  echo "No 'settings.sh' file detected.  Prompting user."
 fi
 
 # Prompt user for information if environment variables not already set.
@@ -84,10 +93,13 @@ fi
 
 
 #### ENABLE BILLING EXPORT
-echo "Please visit the following link to enable Billing Exports.  When prompted specify ${BIGQUERY_DATASET} for the dataset:"
-echo "     https://console.cloud.google.com/billing/${BILLING_ACCOUNT_ID}/export/bigquery/edit?organizationId=${ORGANIZATION_ID}"
-echo
+echo "Please visit the following link to enable Billing Exports.
+When prompted specify '${BIGQUERY_PROJECT_ID}' as the project and '${BIGQUERY_DATASET}' as the dataset:
+
+  https://console.cloud.google.com/billing/${BILLING_ACCOUNT_ID}/export/bigquery/edit?organizationId=${ORGANIZATION_ID}
+"
 read -p "Press ENTER to continue."
+echo
 
 
 #### ENABLING RECOMMENDER
@@ -108,9 +120,7 @@ for PROJECT in $(gcloud beta billing projects list --billing-account ${BILLING_A
       echo "Enabling recommender for project '${PROJECT}'."
       gcloud services enable recommender.googleapis.com --project='${PROJECT}'
     fi  
-
   fi
-
 done
 
 
@@ -124,6 +134,7 @@ gcloud asset export \
 
 
 #### EXPORT RECOMMENDER DATA
+echo "resource,description,units,currency_code,duration" > recommendations.csv
 for PROJECT in $(gcloud beta billing projects list --billing-account ${BILLING_ACCOUNT_ID} --format 'value(projectId)'); do
 
   # If the compute api is enabled.
@@ -137,29 +148,70 @@ for PROJECT in $(gcloud beta billing projects list --billing-account ${BILLING_A
         
         # Get recommendations
         echo "Getting instance machine type recommendations for project ${PROJECT} and zone ${ZONE}."
-        echo
         gcloud alpha recommender recommendations list \
           --recommender='google.compute.instance.MachineTypeRecommender' \
           --location="${ZONE}" \
           --project="${PROJECT}" \
           --filter primaryImpact.category:COST \
-          --format 'csv(content.operationGroups[0].operations.resource,description, primaryImpact.costProjection.cost.units, primaryImpact.costProjection.cost.currencyCode, primaryImpact.costProjection.duration)'
-        echo
+          --format 'csv[no-heading](content.operationGroups[0].operations.resource,description, primaryImpact.costProjection.cost.units, primaryImpact.costProjection.cost.currencyCode, primaryImpact.costProjection.duration)' \
+          >> recommendations.csv
 
         echo "Getting instance group machine type recommendations for project ${PROJECT} and zone ${ZONE}."
-        echo
         gcloud alpha recommender recommendations list \
           --recommender='google.compute.instanceGroupManager.MachineTypeRecommender' \
           --location="${ZONE}" \
           --project="${PROJECT}" \
           --filter primaryImpact.category:COST \
-          --format 'csv(content.operationGroups[0].operations.resource,description, primaryImpact.costProjection.cost.units, primaryImpact.costProjection.cost.currencyCode, primaryImpact.costProjection.duration)'
-        echo
+          --format 'csv[no-heading](content.operationGroups[0].operations.resource,description, primaryImpact.costProjection.cost.units, primaryImpact.costProjection.cost.currencyCode, primaryImpact.costProjection.duration)' \
+          >> recommendations.csv
 
       done
-    
     fi
-  
   fi
-
 done
+
+# Import the combined recommendatons.csv into BigQuery
+echo "Importing combined recommendations into BigQuery."
+bq load --autodetect --source_format=CSV ${BIGQUERY_DATASET}.recommendations recommendations.csv
+
+
+#### VERIFY EXPORT
+
+# Verify whether asset information was exported.
+CAI_PRESENT=$(bq ls \
+  --project_id ${BIGQUERY_PROJECT_ID} \
+  --dataset_id ${BIGQUERY_DATASET} \
+  --format csv | cut -d , -f 4 | cut -d '.' -f 2 | tail -n +2 | grep -i "cloud_asset_inventory")
+
+if ! [[ "${CAI_PRESENT}" ]]; then
+  echo "Cloud Asset Inventory data was not successfully exported to project '${BIGQUERY_PROJECT_ID}' in dataset '${BIGQUERY_DATASET}'." 
+else
+  echo "Cloud Asset Inventory data was successfully exported."
+fi
+
+# Verify whether billing information was exported.
+BILLING_EXPORT_TABLE_NAME=$(echo "gcp_billing_export_v1_${BILLING_ACCOUNT_ID}" | sed 's/-/_/g')
+BILLING_EXPORT_PRESENT=$(bq ls \
+  --project_id ${BIGQUERY_PROJECT_ID} \
+  --dataset_id ${BIGQUERY_DATASET} \
+  --format csv | cut -d , -f 4 | cut -d '.' -f 2 | tail -n +2 | grep -i "${BILLING_EXPORT_TABLE_NAME}") 
+
+if ! [[ "${BILLING_EXPORT_PRESENT}" ]]; then
+  echo "Billing export data was not successfully exported to project '${BIGQUERY_PROJECT_ID}' in dataset '${BIGQUERY_DATASET}'." 
+else
+  echo "Billing export data was successfully exported."
+fi
+
+# Verify whether recommnder information was exported.
+RECOMMENDATIONS_PRESENT=$(bq ls \
+  --project_id ${BIGQUERY_PROJECT_ID} \
+  --dataset_id ${BIGQUERY_DATASET} \
+ --format csv | cut -d , -f 4 | cut -d '.' -f 2 | tail -n +2 | grep -i "recommendations")
+
+if ! [[ "${RECOMMENDATIONS_PRESENT}" ]]; then
+  echo "Recommendations was not successfully exported to project '${BIGQUERY_PROJECT_ID}' in dataset '${BIGQUERY_DATASET}'." 
+else
+  echo "Recommendations data was successfully exported."
+fi
+
+
