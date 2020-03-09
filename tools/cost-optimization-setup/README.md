@@ -27,7 +27,7 @@ cd professional-services/tools/cost-optimization-setup
 ./cost-optimization-setup
 ```
 ### Advanced
-If you would not like to be prompted interactively, set the following environment variables:
+The script uses the following environment variables:
 - `BILLING_ACCOUNT_ID` - The billing account ID.
 - `ORGANIZATION_ID` - The organization ID used to export assets information.
 - `BIGQUERY_PROJECT_ID` - The project ID for the project that contains BigQuery and will contain the exported data.
@@ -38,7 +38,7 @@ You can set these enviroment variables in-line.  Here is an example:
 $ BILLING_ACCOUNT_ID=123456789 ./cost-optimization-setup
 ```
 
-You can set these environment variables in advance or running the command.  Here is an example:
+You can set these environment variables prior to running the command.  Here is an example:
 ```
 $ export BILLING_ACCOUNT_ID=123456789
 $ ./cost-optimization-setup
