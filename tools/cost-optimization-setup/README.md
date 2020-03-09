@@ -2,7 +2,14 @@
 This tool was designed to export information from your organization to BigQuery to identify opportunities for cost optimization.
 
 ## Prerequisites
+### Environment
 This tool is designed to be executed in the Cloud Shell.
+
+### Permissions
+This tool requires the following permissions:
+- Billing Account Administrator Role [to enable billing data export](https://cloud.google.com/billing/docs/how-to/export-data-bigquery#required_permissions).
+- BigQuery User role for the Cloud project that contains the BigQuery dataset [that will be used to store the Cloud Billing data](https://cloud.google.com/billing/docs/how-to/export-data-bigquery#required_permissions).
+- Cloud Asset Viewer (roles/cloudasset.viewer), which grants [read-only access to cloud asset metadata](https://cloud.google.com/asset-inventory/docs/access-control#roles).
 
 ## Usage
 ### Basic
