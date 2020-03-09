@@ -3,7 +3,9 @@ This tool was designed to export information from your organization to BigQuery 
 
 ## Prerequisites
 ### Environment
-This tool is designed to be executed in the Cloud Shell.
+This tool assumes the following:
+- The execution environment is Cloud Shell.
+- The user knows how to use basic git commands.
 
 ### Permissions
 This tool requires the following permissions:
@@ -14,17 +16,18 @@ This tool requires the following permissions:
 ## Usage
 ### Basic
 Do the following:
-1. Clone the professional services repository 
+1. Clone the professional services repository, and checkout the feature branch: 
 ```
-git clone https://github.com/danieldsj/professional-services.git
+$ git clone https://github.com/danieldsj/professional-services.git
+$ git checkout cost-optimization-setup
 ```
 2. Change directory to the cost optimization setup directory:
 ```
-cd professional-services/tools/cost-optimization-setup
+$ cd professional-services/tools/cost-optimization-setup
 ```
 3. Run the cost optimization setup command:
 ```
-./cost-optimization-setup
+$ ./cost-optimization-setup
 ```
 ### Advanced
 The script uses the following environment variables:
