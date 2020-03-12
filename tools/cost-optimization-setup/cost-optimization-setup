@@ -134,7 +134,7 @@ gcloud asset export \
 
 
 #### EXPORT RECOMMENDER DATA
-echo "resource,description,units,currency_code,duration" > recommendations.csv
+echo "content,description,etag,lastRefreshTime,name,primaryImpact,recommenderSubtype,stateInfo" > recommendations.csv
 for PROJECT in $(gcloud beta billing projects list --billing-account ${BILLING_ACCOUNT_ID} --format 'value(projectId)'); do
 
   # If the compute api is enabled.
@@ -153,7 +153,7 @@ for PROJECT in $(gcloud beta billing projects list --billing-account ${BILLING_A
           --location="${ZONE}" \
           --project="${PROJECT}" \
           --filter primaryImpact.category:COST \
-          --format 'csv[no-heading](content.operationGroups[0].operations.resource,description, primaryImpact.costProjection.cost.units, primaryImpact.costProjection.cost.currencyCode, primaryImpact.costProjection.duration)' \
+          --format 'csv[no-heading](content,description,etag,lastRefreshTime,name,primaryImpact,recommenderSubtype,stateInfo)' \
           >> recommendations.csv
 
         echo "Getting instance group machine type recommendations for project ${PROJECT} and zone ${ZONE}."
@@ -162,7 +162,7 @@ for PROJECT in $(gcloud beta billing projects list --billing-account ${BILLING_A
           --location="${ZONE}" \
           --project="${PROJECT}" \
           --filter primaryImpact.category:COST \
-          --format 'csv[no-heading](content.operationGroups[0].operations.resource,description, primaryImpact.costProjection.cost.units, primaryImpact.costProjection.cost.currencyCode, primaryImpact.costProjection.duration)' \
+          --format 'csv[no-heading](content,description,etag,lastRefreshTime,name,primaryImpact,recommenderSubtype,stateInfo)' \
           >> recommendations.csv
 
       done
