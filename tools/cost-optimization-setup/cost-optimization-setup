@@ -148,7 +148,7 @@ for PROJECT in $(gcloud beta billing projects list --billing-account ${BILLING_A
         
         # Get recommendations
         echo "Getting instance machine type recommendations for project ${PROJECT} and zone ${ZONE}."
-        gcloud alpha recommender recommendations list \
+        gcloud recommender recommendations list \
           --recommender='google.compute.instance.MachineTypeRecommender' \
           --location="${ZONE}" \
           --project="${PROJECT}" \
@@ -157,7 +157,7 @@ for PROJECT in $(gcloud beta billing projects list --billing-account ${BILLING_A
           >> recommendations.csv
 
         echo "Getting instance group machine type recommendations for project ${PROJECT} and zone ${ZONE}."
-        gcloud alpha recommender recommendations list \
+        gcloud recommender recommendations list \
           --recommender='google.compute.instanceGroupManager.MachineTypeRecommender' \
           --location="${ZONE}" \
           --project="${PROJECT}" \
@@ -172,7 +172,7 @@ done
 
 # Import the combined recommendatons.csv into BigQuery
 echo "Importing combined recommendations into BigQuery."
-bq load --autodetect --source_format=CSV ${BIGQUERY_DATASET}.recommendations recommendations.csv
+bq load --autodetect --replace --source_format=CSV ${BIGQUERY_DATASET}.recommendations recommendations.csv
 
 
 #### VERIFY EXPORT
@@ -214,4 +214,29 @@ else
   echo "Recommendations data was successfully exported."
 fi
 
+echo "
+To visualize the exported data and get cost optimization recommendations, open the following link and follow the instructions:
 
+  https://datastudio.google.com/c/u/0/reporting/12ea3bde-01f8-41d6-8bc7-ba0a82fe4b88
+
+When prompted for 'Billing Export Table', do the following:
+1. Click 'Create New Datasource'
+2. Click the 'BigQuery' connector.
+3. Select the '${BIGQUERY_PROJECT_ID}' as the project, '${BIGQUERY_DATASET}' as the dataset, and 'gcp_billing_export_v1_${BILLING_ACCOUNT_ID}' as the table.
+4. Click on 'Connect' and follow the rest of the prompts.
+
+When prompted for 'Cloud Asset Inventory Table', do the following:
+1. Click 'Create New Datasource'
+2. Click the 'BigQuery' connector.
+3. Select the '${BIGQUERY_PROJECT_ID}' as the project, '${BIGQUERY_DATASET}' as the dataset, and 'cloud_asset_inventory' as the table.
+4. Click on 'Connect' and follow the rest of the prompts.
+
+When prompted for 'Recommendations Table', do the following:
+1. Click 'Create New Datasource'
+2. Click the 'BigQuery' connector.
+3. Select the '${BIGQUERY_PROJECT_ID}' as the project, '${BIGQUERY_DATASET}' as the dataset, and 'recommendations' as the table.
+4. Click on 'Connect' and follow the rest of the prompts.
+
+"
+read -p "Press ENTER to continue."
+echo
