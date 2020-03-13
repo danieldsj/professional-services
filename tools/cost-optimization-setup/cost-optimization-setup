@@ -134,7 +134,7 @@ gcloud asset export \
 
 
 #### EXPORT RECOMMENDER DATA
-echo "content,description,etag,lastRefreshTime,name,primaryImpact,recommenderSubtype,stateInfo" > recommendations.csv
+#echo "content,description,etag,lastRefreshTime,name,primaryImpact,recommenderSubtype,stateInfo" > recommendations.csv
 for PROJECT in $(gcloud beta billing projects list --billing-account ${BILLING_ACCOUNT_ID} --format 'value(projectId)'); do
 
   # If the compute api is enabled.
@@ -153,8 +153,10 @@ for PROJECT in $(gcloud beta billing projects list --billing-account ${BILLING_A
           --location="${ZONE}" \
           --project="${PROJECT}" \
           --filter primaryImpact.category:COST \
-          --format 'csv[no-heading](content,description,etag,lastRefreshTime,name,primaryImpact,recommenderSubtype,stateInfo)' \
-          >> recommendations.csv
+          --format json \
+          | sed -e ':a' -e 'N' -e '$!ba' -e 's/\n/ /g' \
+          >> recommendations.jsonl
+          #--format 'csv[no-heading](content,description,etag,lastRefreshTime,name,primaryImpact,recommenderSubtype,stateInfo)' \
 
         echo "Getting instance group machine type recommendations for project ${PROJECT} and zone ${ZONE}."
         gcloud recommender recommendations list \
@@ -162,8 +164,10 @@ for PROJECT in $(gcloud beta billing projects list --billing-account ${BILLING_A
           --location="${ZONE}" \
           --project="${PROJECT}" \
           --filter primaryImpact.category:COST \
-          --format 'csv[no-heading](content,description,etag,lastRefreshTime,name,primaryImpact,recommenderSubtype,stateInfo)' \
-          >> recommendations.csv
+          --format json \
+          | sed -e ':a' -e 'N' -e '$!ba' -e 's/\n/ /g' \
+          >> recommendations.jsonl
+          #--format 'csv[no-heading](content,description,etag,lastRefreshTime,name,primaryImpact,recommenderSubtype,stateInfo)' \
 
       done
     fi
@@ -172,7 +176,8 @@ done
 
 # Import the combined recommendatons.csv into BigQuery
 echo "Importing combined recommendations into BigQuery."
-bq load --autodetect --replace --source_format=CSV ${BIGQUERY_DATASET}.recommendations recommendations.csv
+#bq load --autodetect --replace --source_format=CSV ${BIGQUERY_DATASET}.recommendations recommendations.csv
+bq load --autodetect --replace --source_format=NEWLINE_DELIMITED_JSON ${BIGQUERY_DATASET}.recommendations recommendations.jsonl
 
 
 #### VERIFY EXPORT
