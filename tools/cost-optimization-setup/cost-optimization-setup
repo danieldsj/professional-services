@@ -134,7 +134,6 @@ gcloud asset export \
 
 
 #### EXPORT RECOMMENDER DATA
-#echo "content,description,etag,lastRefreshTime,name,primaryImpact,recommenderSubtype,stateInfo" > recommendations.csv
 for PROJECT in $(gcloud beta billing projects list --billing-account ${BILLING_ACCOUNT_ID} --format 'value(projectId)'); do
 
   # If the compute api is enabled.
@@ -154,9 +153,8 @@ for PROJECT in $(gcloud beta billing projects list --billing-account ${BILLING_A
           --project="${PROJECT}" \
           --filter primaryImpact.category:COST \
           --format json \
-          | sed -e ':a' -e 'N' -e '$!ba' -e 's/\n/ /g' \
+          | python -c 'import sys, json; print json.load(sys.stdin)[0]'
           >> recommendations.jsonl
-          #--format 'csv[no-heading](content,description,etag,lastRefreshTime,name,primaryImpact,recommenderSubtype,stateInfo)' \
 
         echo "Getting instance group machine type recommendations for project ${PROJECT} and zone ${ZONE}."
         gcloud recommender recommendations list \
@@ -165,9 +163,8 @@ for PROJECT in $(gcloud beta billing projects list --billing-account ${BILLING_A
           --project="${PROJECT}" \
           --filter primaryImpact.category:COST \
           --format json \
-          | sed -e ':a' -e 'N' -e '$!ba' -e 's/\n/ /g' \
+          | python -c 'import sys, json; print json.load(sys.stdin)[0]'
           >> recommendations.jsonl
-          #--format 'csv[no-heading](content,description,etag,lastRefreshTime,name,primaryImpact,recommenderSubtype,stateInfo)' \
 
       done
     fi
