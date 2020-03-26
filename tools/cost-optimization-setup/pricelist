@@ -16,16 +16,21 @@
 #
 # Script assists with collecting information that can be used to optimize costs.
 
-import google.auth
-from googleapiclient.discovery import build
-from googleapiclient.http import HttpError
 import json
 import time
 import sys
 import datetime
 
+try:
+    import google.auth
+    from googleapiclient.discovery import build
+    from googleapiclient.http import HttpError
+except ModuleNotFoundError as e:
+    print("It appears you do not have google-auth and google-api-python-client installed.  These packages are required", file=sys.stderr)
+    exit(1)
+
 credential, project_id = google.auth.default()
-cloudbilling = build('cloudbilling', 'v1')
+cloudbilling = build('cloudbilling', 'v1', credentials=credential)
 page_size = 5000
 delay = 1
 
@@ -35,20 +40,20 @@ delay = 1
 # You may need to set the quota project using the "gcloud auth application-default set-quota-project" command first.
 # Not running the above command can result in the script taking a very long time (days?) due to small quotas.
 
-service_results = dict()
+services_results = dict()
 while True:
 
     # get servces results
     # since there are quotas, introduced exponential delays on on quota/limit failures.
     while True:
         try:
-            services_results = cloudbilling.services().list(pageSize=page_size, pageToken=service_results.get('nextPageToken')).execute()
+            services_results = cloudbilling.services().list(pageSize=page_size, pageToken=services_results.get('nextPageToken')).execute()
             delay = 1
             break
         except HttpError as e:
             isodate = datetime.datetime.utcnow().isoformat()
-            print("{}Z - We have hit a quota. Caught exception: {}".format(isodate,e),file=sys.stderr)
-            print("{}Z - Sleeping for {} seconds".format(isodate,delay),file=sys.stderr)
+            print("{}Z - We have hit a HTTP error.".format(isodate,e),file=sys.stderr)
+            print("{}Z - Retrying in {} seconds".format(isodate,delay),file=sys.stderr)
             time.sleep(delay)
             delay = delay * 2
 
@@ -74,14 +79,13 @@ while True:
 
             # for each sku
             for sku in skus_results.get('skus'):
-
                 # dump the json in a single like (JSONL format)
                 print(json.dumps(sku))
 
             # break if there is no next page of skus.
-            if skus_results.get('nextPageToken') == None:
+            if skus_results.get('nextPageToken') == "":
                 break
             
     # break if there is no next page of services
-    if services_results.get('nextPageToken') == None:
+    if services_results.get('nextPageToken') == "":
         break

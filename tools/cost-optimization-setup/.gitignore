@@ -1,5 +1,6 @@
 settings.sh
 recommendations.csv
 recommendations.jsonl
+secret.json
 *.jsonl
 .env/

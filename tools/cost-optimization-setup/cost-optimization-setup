@@ -89,6 +89,18 @@ if ! [[ $(gcloud services list --project ${BIGQUERY_PROJECT_ID} --filter "state:
   exit 1
 fi
 
+# Check to see if python dependencies are installed
+if ! [[ $(pip3 list | egrep -i 'google-api-python-client')  ]]; then
+  echo "The python package 'google-api-python-client' is required, but not installed."
+  exit 1
+fi
+
+if ! [[ $(pip3 list | egrep -i 'google-auth') ]]; then
+  echo "The python package 'google-api-python-client' is required, but not installed."
+  exit 1
+fi
+
+
 # TODO (danieldsj) - Check to see if the BIGQUERY_DATASET is valid and exists within the above project.  If not, offer to create one.  If not, exit.
 
 
@@ -177,8 +189,24 @@ done
 # Import the combined recommendatons.csv into BigQuery
 echo "Importing combined recommendations into BigQuery."
 #bq load --autodetect --replace --source_format=CSV ${BIGQUERY_DATASET}.recommendations recommendations.csv
-bq load --autodetect --replace --source_format=NEWLINE_DELIMITED_JSON ${BIGQUERY_DATASET}.recommendations recommendations.jsonl
+bq load \
+  --autodetect \
+  --replace \
+  --project_id=${BIGQUERY_PROJECT_ID} \
+  --source_format=NEWLINE_DELIMITED_JSON \
+  ${BIGQUERY_DATASET}.recommendations recommendations.jsonl
 
+### DOWNLOAD SKU DATA
+echo "Downloading latest SKU list to file. This may take up to 5 minutes."
+./pricelist > skus.jsonl
+
+# IMPORT SKU SKU DATA
+bq load \
+  --autodetect \
+  --replace \
+  --project_id=${BIGQUERY_PROJECT_ID} \
+  --source_format=NEWLINE_DELIMITED_JSON \
+  ${BIGQUERY_DATASET}.skus skus.jsonl
 
 #### VERIFY EXPORT
 
